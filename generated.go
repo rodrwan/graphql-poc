@@ -41,12 +41,13 @@ type ComplexityRoot struct {
 	Message struct {
 		Id   func(childComplexity int) int
 		Text func(childComplexity int) int
+		User func(childComplexity int) int
 	}
 
 	Query struct {
 		Users    func(childComplexity int) int
-		User     func(childComplexity int, id string) int
 		Me       func(childComplexity int) int
+		User     func(childComplexity int, id string) int
 		Messages func(childComplexity int) int
 		Message  func(childComplexity int, id string) int
 	}
@@ -54,13 +55,14 @@ type ComplexityRoot struct {
 	User struct {
 		Id       func(childComplexity int) int
 		Username func(childComplexity int) int
+		Messages func(childComplexity int) int
 	}
 }
 
 type QueryResolver interface {
 	Users(ctx context.Context) ([]User, error)
-	User(ctx context.Context, id string) (User, error)
-	Me(ctx context.Context) (User, error)
+	Me(ctx context.Context) (*User, error)
+	User(ctx context.Context, id string) (*User, error)
 	Messages(ctx context.Context) ([]Message, error)
 	Message(ctx context.Context, id string) (Message, error)
 }
@@ -167,12 +169,26 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Message.Text(childComplexity), true
 
+	case "Message.user":
+		if e.complexity.Message.User == nil {
+			break
+		}
+
+		return e.complexity.Message.User(childComplexity), true
+
 	case "Query.users":
 		if e.complexity.Query.Users == nil {
 			break
 		}
 
 		return e.complexity.Query.Users(childComplexity), true
+
+	case "Query.me":
+		if e.complexity.Query.Me == nil {
+			break
+		}
+
+		return e.complexity.Query.Me(childComplexity), true
 
 	case "Query.user":
 		if e.complexity.Query.User == nil {
@@ -185,13 +201,6 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Query.User(childComplexity, args["id"].(string)), true
-
-	case "Query.me":
-		if e.complexity.Query.Me == nil {
-			break
-		}
-
-		return e.complexity.Query.Me(childComplexity), true
 
 	case "Query.messages":
 		if e.complexity.Query.Messages == nil {
@@ -225,6 +234,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.User.Username(childComplexity), true
+
+	case "User.messages":
+		if e.complexity.User.Messages == nil {
+			break
+		}
+
+		return e.complexity.User.Messages(childComplexity), true
 
 	}
 	return 0, false
@@ -280,6 +296,11 @@ func (ec *executionContext) _Message(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "text":
 			out.Values[i] = ec._Message_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				invalid = true
+			}
+		case "user":
+			out.Values[i] = ec._Message_user(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				invalid = true
 			}
@@ -348,6 +369,34 @@ func (ec *executionContext) _Message_text(ctx context.Context, field graphql.Col
 	return graphql.MarshalString(res)
 }
 
+// nolint: vetshadow
+func (ec *executionContext) _Message_user(ctx context.Context, field graphql.CollectedField, obj *Message) graphql.Marshaler {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
+	rctx := &graphql.ResolverContext{
+		Object: "Message",
+		Args:   nil,
+		Field:  field,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.User, nil
+	})
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(User)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+
+	return ec._User(ctx, field.Selections, &res)
+}
+
 var queryImplementors = []string{"Query"}
 
 // nolint: gocyclo, errcheck, gas, goconst
@@ -371,27 +420,18 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			wg.Add(1)
 			go func(i int, field graphql.CollectedField) {
 				out.Values[i] = ec._Query_users(ctx, field)
-				if out.Values[i] == graphql.Null {
-					invalid = true
-				}
-				wg.Done()
-			}(i, field)
-		case "user":
-			wg.Add(1)
-			go func(i int, field graphql.CollectedField) {
-				out.Values[i] = ec._Query_user(ctx, field)
-				if out.Values[i] == graphql.Null {
-					invalid = true
-				}
 				wg.Done()
 			}(i, field)
 		case "me":
 			wg.Add(1)
 			go func(i int, field graphql.CollectedField) {
 				out.Values[i] = ec._Query_me(ctx, field)
-				if out.Values[i] == graphql.Null {
-					invalid = true
-				}
+				wg.Done()
+			}(i, field)
+		case "user":
+			wg.Add(1)
+			go func(i int, field graphql.CollectedField) {
+				out.Values[i] = ec._Query_user(ctx, field)
 				wg.Done()
 			}(i, field)
 		case "messages":
@@ -443,9 +483,6 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 		return ec.resolvers.Query().Users(rctx)
 	})
 	if resTmp == nil {
-		if !ec.HasError(rctx) {
-			ec.Errorf(ctx, "must not be null")
-		}
 		return graphql.Null
 	}
 	res := resTmp.([]User)
@@ -488,6 +525,35 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 }
 
 // nolint: vetshadow
+func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
+	rctx := &graphql.ResolverContext{
+		Object: "Query",
+		Args:   nil,
+		Field:  field,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec.FieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Me(rctx)
+	})
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*User)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+
+	if res == nil {
+		return graphql.Null
+	}
+
+	return ec._User(ctx, field.Selections, res)
+}
+
+// nolint: vetshadow
 func (ec *executionContext) _Query_user(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
 	ctx = ec.Tracer.StartFieldExecution(ctx, field)
 	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
@@ -509,44 +575,17 @@ func (ec *executionContext) _Query_user(ctx context.Context, field graphql.Colle
 		return ec.resolvers.Query().User(rctx, args["id"].(string))
 	})
 	if resTmp == nil {
-		if !ec.HasError(rctx) {
-			ec.Errorf(ctx, "must not be null")
-		}
 		return graphql.Null
 	}
-	res := resTmp.(User)
+	res := resTmp.(*User)
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
 
-	return ec._User(ctx, field.Selections, &res)
-}
-
-// nolint: vetshadow
-func (ec *executionContext) _Query_me(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
-	ctx = ec.Tracer.StartFieldExecution(ctx, field)
-	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
-	rctx := &graphql.ResolverContext{
-		Object: "Query",
-		Args:   nil,
-		Field:  field,
-	}
-	ctx = graphql.WithResolverContext(ctx, rctx)
-	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
-	resTmp := ec.FieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Me(rctx)
-	})
-	if resTmp == nil {
-		if !ec.HasError(rctx) {
-			ec.Errorf(ctx, "must not be null")
-		}
+	if res == nil {
 		return graphql.Null
 	}
-	res := resTmp.(User)
-	rctx.Result = res
-	ctx = ec.Tracer.StartFieldChildExecution(ctx)
 
-	return ec._User(ctx, field.Selections, &res)
+	return ec._User(ctx, field.Selections, res)
 }
 
 // nolint: vetshadow
@@ -731,6 +770,8 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				invalid = true
 			}
+		case "messages":
+			out.Values[i] = ec._User_messages(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -794,6 +835,63 @@ func (ec *executionContext) _User_username(ctx context.Context, field graphql.Co
 	rctx.Result = res
 	ctx = ec.Tracer.StartFieldChildExecution(ctx)
 	return graphql.MarshalString(res)
+}
+
+// nolint: vetshadow
+func (ec *executionContext) _User_messages(ctx context.Context, field graphql.CollectedField, obj *User) graphql.Marshaler {
+	ctx = ec.Tracer.StartFieldExecution(ctx, field)
+	defer func() { ec.Tracer.EndFieldExecution(ctx) }()
+	rctx := &graphql.ResolverContext{
+		Object: "User",
+		Args:   nil,
+		Field:  field,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	ctx = ec.Tracer.StartFieldResolverExecution(ctx, rctx)
+	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Messages, nil
+	})
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.([]Message)
+	rctx.Result = res
+	ctx = ec.Tracer.StartFieldChildExecution(ctx)
+
+	arr1 := make(graphql.Array, len(res))
+	var wg sync.WaitGroup
+
+	isLen1 := len(res) == 1
+	if !isLen1 {
+		wg.Add(len(res))
+	}
+
+	for idx1 := range res {
+		idx1 := idx1
+		rctx := &graphql.ResolverContext{
+			Index:  &idx1,
+			Result: &res[idx1],
+		}
+		ctx := graphql.WithResolverContext(ctx, rctx)
+		f := func(idx1 int) {
+			if !isLen1 {
+				defer wg.Done()
+			}
+			arr1[idx1] = func() graphql.Marshaler {
+
+				return ec._Message(ctx, field.Selections, &res[idx1])
+			}()
+		}
+		if isLen1 {
+			f(idx1)
+		} else {
+			go f(idx1)
+		}
+
+	}
+	wg.Wait()
+	return arr1
 }
 
 var __DirectiveImplementors = []string{"__Directive"}
@@ -2272,9 +2370,10 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 
 var parsedSchema = gqlparser.MustLoadSchema(
 	&ast.Source{Name: "schema.graphql", Input: `type Query {
-  users: [User!]!
-  user(id: ID!): User!
-  me: User!
+  users: [User!]
+  me: User
+  user(id: ID!): User
+
   messages: [Message!]!
   message(id: ID!): Message!
 }
@@ -2282,10 +2381,12 @@ var parsedSchema = gqlparser.MustLoadSchema(
 type User {
   id: ID!
   username: String!
+  messages: [Message!]
 }
 
 type Message {
   id: ID!
   text: String!
+  user: User!
 }`},
 )

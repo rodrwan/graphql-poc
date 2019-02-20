@@ -1,7 +1,8 @@
 type Query {
-  users: [User!]!
-  user(id: ID!): User!
-  me: User!
+  users: [User!]
+  me: User
+  user(id: ID!): User
+
   messages: [Message!]!
   message(id: ID!): Message!
 }
@@ -9,9 +10,11 @@ type Query {
 type User {
   id: ID!
   username: String!
+  messages: [Message!]
 }
 
 type Message {
   id: ID!
   text: String!
+  user: User!
 }

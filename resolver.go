@@ -11,17 +11,6 @@ type Resolver struct {
 }
 
 func (r *Resolver) Query() QueryResolver {
-	messages := make(map[int]Message)
-	messages[1] = Message{
-		ID:   "1",
-		Text: "Hello World",
-	}
-	messages[2] = Message{
-		ID:   "2",
-		Text: "Bye World",
-	}
-	r.Messages = messages
-
 	users := make(map[int]User)
 	users[1] = User{
 		ID:       "1",
@@ -31,8 +20,21 @@ func (r *Resolver) Query() QueryResolver {
 		ID:       "2",
 		Username: "Dave Davids",
 	}
-	r.Users = users
 
+	messages := make(map[int]Message)
+	messages[1] = Message{
+		ID:   "1",
+		Text: "Hello World",
+		User: users[1],
+	}
+	messages[2] = Message{
+		ID:   "2",
+		Text: "Bye World",
+		User: users[2],
+	}
+	r.Messages = messages
+
+	r.Users = users
 	return &queryResolver{r}
 }
 
@@ -47,18 +49,18 @@ func (r *queryResolver) Users(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (r *queryResolver) User(ctx context.Context, id string) (User, error) {
-	for _, user := range r.Resolver.Users {
-		if user.ID == id {
-			return user, nil
-		}
-	}
-	return User{}, errors.New("User not found")
+func (r *queryResolver) Me(ctx context.Context) (*User, error) {
+	user := r.Resolver.Users[1]
+	return &user, nil
 }
 
-func (r *queryResolver) Me(ctx context.Context) (User, error) {
-	user := r.Resolver.Users[1]
-	return user, nil
+func (r *queryResolver) User(ctx context.Context, id string) (*User, error) {
+	for _, user := range r.Resolver.Users {
+		if user.ID == id {
+			return &user, nil
+		}
+	}
+	return nil, errors.New("User not found")
 }
 
 func (r *queryResolver) Messages(ctx context.Context) ([]Message, error) {

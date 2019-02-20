@@ -5,9 +5,11 @@ package graphql_poc
 type Message struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`
+	User User   `json:"user"`
 }
 
 type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
+	ID       string    `json:"id"`
+	Username string    `json:"username"`
+	Messages []Message `json:"messages"`
 }
