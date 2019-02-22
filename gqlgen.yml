@@ -8,7 +8,13 @@ schema:
 exec:
   filename: generated.go
 model:
-  filename: models_gen.go
+  filename: models/inputs.go
+  package: models
 resolver:
   filename: resolver.go
   type: Resolver
+models:
+  User:
+    model: github.com/rodrwan/graphql-poc.User
+  Message:
+    model: github.com/rodrwan/graphql-poc.Message
