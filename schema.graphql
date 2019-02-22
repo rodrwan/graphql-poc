@@ -11,15 +11,10 @@ type User {
   id: ID!
   username: String!
   messages: [Message!]!
-
-  user(id: ID!): User
-  me: User
 }
 
 type Message {
   id: ID!
   text: String!
   user: User!
-
-  message(id: ID!): Message!
 }

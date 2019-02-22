@@ -50,13 +50,6 @@ func (r *Resolver) Query() QueryResolver {
 	r.Messages = messages
 	return &queryResolver{r}
 }
-func (r *Resolver) User() UserResolver {
-	users, messages := Data()
-
-	r.Users = users
-	r.Messages = messages
-	return &userResolver{r}
-}
 
 type messageResolver struct{ *Resolver }
 
@@ -67,16 +60,6 @@ func (r *messageResolver) User(ctx context.Context, obj *Message) (User, error) 
 		}
 	}
 	return User{}, nil
-}
-
-func (r *messageResolver) Message(ctx context.Context, obj *Message, id string) (Message, error) {
-	for _, message := range r.Messages {
-		if message.ID == id {
-			return *message, nil
-		}
-	}
-
-	return Message{}, errors.New("Message not found")
 }
 
 type queryResolver struct{ *Resolver }
@@ -141,21 +124,4 @@ func (r *queryResolver) Message(ctx context.Context, id string) (Message, error)
 	}
 
 	return Message{}, errors.New("Message not found")
-}
-
-type userResolver struct{ *Resolver }
-
-func (r *userResolver) User(ctx context.Context, obj *User, id string) (*User, error) {
-	for _, user := range r.Users {
-		if user.ID == id {
-			return user, nil
-		}
-	}
-
-	return nil, errors.New("User not found")
-}
-
-func (r *userResolver) Me(ctx context.Context, obj *User) (*User, error) {
-	user := r.Resolver.Users[1]
-	return user, nil
 }
